@@ -133,8 +133,17 @@ class AWSPollyTTSSettings(TTSSettings):
     """Settings for AWSPollyTTSService.
 
     Parameters:
-        engine: TTS engine to use ('standard', 'neural', etc.).
-        pitch: Voice pitch adjustment (for standard engine only).
+        engine: TTS engine to use: ``"standard"``, ``"neural"``, ``"long-form"``,
+            or ``"generative"``. If left unset, Polly's ``SynthesizeSpeech`` API
+            defaults to ``"standard"`` — the oldest, lowest-quality engine — even
+            for voices that support the newer, more natural ``"neural"`` or
+            ``"generative"`` engines. Not every voice supports every engine, and
+            ``"generative"`` is only available in some regions; see
+            https://docs.aws.amazon.com/polly/latest/dg/voicelist.html for the
+            engine/voice/region matrix. An unsupported combination raises a
+            ``ClientError`` from Polly at synthesis time.
+        pitch: Voice pitch adjustment. Only honored by the ``standard`` engine;
+            ``neural``, ``long-form``, and ``generative`` voices ignore pitch.
         rate: Speech rate adjustment.
         volume: Voice volume adjustment.
         lexicon_names: List of pronunciation lexicons to apply.
@@ -276,6 +285,22 @@ class AWSPollyTTSService(TTSService):
         self._aws_session = aiobotocore.session.get_session()
 
         self._resampler = create_stream_resampler()
+
+        # Polly's SynthesizeSpeech API defaults to the "standard" engine—the
+        # oldest, lowest-quality option—whenever Engine is omitted from the
+        # request. Warn once at startup so users aren't silently stuck on it
+        # when most voices (including the default "Joanna") support the much
+        # more natural "neural" or "generative" engines today.
+        if not self._settings.engine:
+            logger.warning(
+                f"{self} no `engine` set; AWS Polly will default to the 'standard' engine, "
+                "its oldest and lowest-quality voice option. Most voices (including the "
+                "default 'Joanna') support 'neural' or 'generative' for much more natural "
+                "speech — set settings=AWSPollyTTSService.Settings(engine='neural') or "
+                "'generative' explicitly. See "
+                "https://docs.aws.amazon.com/polly/latest/dg/voicelist.html for which "
+                "engines each voice and region supports."
+            )
 
     def can_generate_metrics(self) -> bool:
         """Check if this service can generate processing metrics.
