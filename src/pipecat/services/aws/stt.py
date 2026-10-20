@@ -56,11 +56,36 @@ class AWSTranscribeSTTSettings(STTSettings):
             the fastest. AWS binds this to a connection, so updating it at
             runtime triggers a reconnect. See
             https://docs.aws.amazon.com/transcribe/latest/dg/streaming.html#streaming-partial-result-stabilization.
+        vocabulary_name: Name of a custom vocabulary to improve recognition of
+            domain terms such as product names. The vocabulary must exist in the
+            same region and match the stream's language. See
+            https://docs.aws.amazon.com/transcribe/latest/dg/custom-vocabulary.html.
+        vocabulary_filter_name: Name of a vocabulary filter for words to mask,
+            remove or tag in transcripts. See
+            https://docs.aws.amazon.com/transcribe/latest/dg/vocabulary-filtering.html.
+        vocabulary_filter_method: How filtered words are handled: ``"mask"``
+            replaces them with ``***``, ``"remove"`` drops them, and ``"tag"``
+            leaves them in place and flags them in the result items. Only sent
+            when ``vocabulary_filter_name`` is set; AWS defaults to ``"mask"``.
+        show_speaker_label: Label who is speaking (diarization). Labels appear
+            per word in ``result["Alternatives"][0]["Items"][*]["Speaker"]`` on
+            each ``TranscriptionFrame.result``; the transcript text itself is
+            unchanged. See
+            https://docs.aws.amazon.com/transcribe/latest/dg/diarization.html.
+
+    Changing any of these at runtime triggers a reconnect, since AWS binds them
+    to a connection.
     """
 
     partial_results_stability: Literal["high", "medium", "low"] | NotGiven = field(
         default_factory=lambda: NOT_GIVEN
     )
+    vocabulary_name: str | None | NotGiven = field(default_factory=lambda: NOT_GIVEN)
+    vocabulary_filter_name: str | None | NotGiven = field(default_factory=lambda: NOT_GIVEN)
+    vocabulary_filter_method: Literal["mask", "remove", "tag"] | None | NotGiven = field(
+        default_factory=lambda: NOT_GIVEN
+    )
+    show_speaker_label: bool | NotGiven = field(default_factory=lambda: NOT_GIVEN)
 
 
 class AWSTranscribeSTTService(WebsocketSTTService):
@@ -128,6 +153,10 @@ class AWSTranscribeSTTService(WebsocketSTTService):
             model=None,
             language=Language.EN,
             partial_results_stability="high",
+            vocabulary_name=None,
+            vocabulary_filter_name=None,
+            vocabulary_filter_method=None,
+            show_speaker_label=False,
         )
 
         # 2. Apply direct init arg overrides (deprecated)
@@ -150,8 +179,9 @@ class AWSTranscribeSTTService(WebsocketSTTService):
 
         # Init-only connection config (not runtime-updatable).
         self._media_encoding = "linear16"
+        # Pipelines carry mono audio, so channel identification (which needs
+        # two interleaved channels) is not offered.
         self._number_of_channels = 1
-        self._show_speaker_label = False
         self._enable_channel_identification = False
 
         # Explicit or environment keys. Without them, each connection is signed
@@ -342,6 +372,14 @@ class AWSTranscribeSTTService(WebsocketSTTService):
                 )
                 connect_sample_rate = 16000
 
+            vocabulary_filter_name = assert_given(self._settings.vocabulary_filter_name)
+            vocabulary_filter_method = assert_given(self._settings.vocabulary_filter_method)
+            if vocabulary_filter_method and not vocabulary_filter_name:
+                logger.warning(
+                    f"{self} vocabulary_filter_method is ignored without a vocabulary_filter_name"
+                )
+                vocabulary_filter_method = None
+
             # Generate random websocket key
             websocket_key = "".join(
                 random.choices(
@@ -369,7 +407,10 @@ class AWSTranscribeSTTService(WebsocketSTTService):
                 number_of_channels=self._number_of_channels,
                 enable_partial_results_stabilization=True,
                 partial_results_stability=assert_given(self._settings.partial_results_stability),
-                show_speaker_label=self._show_speaker_label,
+                vocabulary_name=assert_given(self._settings.vocabulary_name),
+                vocabulary_filter_name=vocabulary_filter_name,
+                vocabulary_filter_method=vocabulary_filter_method,
+                show_speaker_label=assert_given(self._settings.show_speaker_label),
                 enable_channel_identification=self._enable_channel_identification,
             )
 

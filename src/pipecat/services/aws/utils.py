@@ -98,6 +98,7 @@ def get_presigned_url(
     partial_results_stability: str = "high",
     vocabulary_name: str | None = None,
     vocabulary_filter_name: str | None = None,
+    vocabulary_filter_method: str | None = None,
     show_speaker_label: bool = False,
     enable_channel_identification: bool = False,
 ) -> str:
@@ -115,6 +116,8 @@ def get_presigned_url(
         partial_results_stability: Stability level for partial results.
         vocabulary_name: Custom vocabulary name to use.
         vocabulary_filter_name: Vocabulary filter name to apply.
+        vocabulary_filter_method: How filtered words are handled ("mask",
+            "remove" or "tag"). AWS defaults to "mask" when omitted.
         show_speaker_label: Whether to include speaker labels.
         enable_channel_identification: Whether to enable channel identification.
 
@@ -143,6 +146,7 @@ def get_presigned_url(
         media_encoding=media_encoding,
         vocabulary_name=vocabulary_name,
         vocabulary_filter_name=vocabulary_filter_name,
+        vocabulary_filter_method=vocabulary_filter_method,
         show_speaker_label=show_speaker_label,
         enable_channel_identification=enable_channel_identification,
         number_of_channels=number_of_channels,
@@ -202,6 +206,7 @@ class AWSTranscribePresignedURL:
         media_encoding: str = "pcm",
         vocabulary_name: str | None = None,
         vocabulary_filter_name: str | None = None,
+        vocabulary_filter_method: str | None = None,
         show_speaker_label: bool = False,
         enable_channel_identification: bool = False,
         number_of_channels: int = 1,
@@ -216,6 +221,7 @@ class AWSTranscribePresignedURL:
             media_encoding: Audio encoding format.
             vocabulary_name: Custom vocabulary name.
             vocabulary_filter_name: Vocabulary filter name.
+            vocabulary_filter_method: How filtered words are handled.
             show_speaker_label: Whether to include speaker labels.
             enable_channel_identification: Whether to enable channel identification.
             number_of_channels: Number of audio channels.
@@ -263,6 +269,9 @@ class AWSTranscribePresignedURL:
             self.canonical_querystring += "&sample-rate=" + str(sample_rate)
         if show_speaker_label:
             self.canonical_querystring += "&show-speaker-label=true"
+        # SigV4 needs the query string sorted: method sorts before name.
+        if vocabulary_filter_method:
+            self.canonical_querystring += "&vocabulary-filter-method=" + vocabulary_filter_method
         if vocabulary_filter_name:
             self.canonical_querystring += "&vocabulary-filter-name=" + vocabulary_filter_name
         if vocabulary_name:
